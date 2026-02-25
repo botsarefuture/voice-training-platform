@@ -6,10 +6,12 @@ export default function Recorder({ apiBase, userId }) {
   const [transcription, setTranscription] = useState('')
   const [metrics, setMetrics] = useState(null)
   const [livePitch, setLivePitch] = useState(null)
+  const [liveTip, setLiveTip] = useState('')
   const mediaRecorderRef = useRef(null)
   const analyserRef = useRef(null)
   const audioContextRef = useRef(null)
   const rafRef = useRef(null)
+  const spectrogramRef = useRef(null)
 
   useEffect(() => () => stopLiveAnalysis(), [])
 
@@ -19,13 +21,21 @@ export default function Recorder({ apiBase, userId }) {
     const source = audioContextRef.current.createMediaStreamSource(stream)
     analyserRef.current = audioContextRef.current.createAnalyser()
     analyserRef.current.fftSize = 2048
+    analyserRef.current.smoothingTimeConstant = 0.8
     source.connect(analyserRef.current)
     const buffer = new Float32Array(analyserRef.current.fftSize)
+    const freqData = new Uint8Array(analyserRef.current.frequencyBinCount)
 
     const update = () => {
       analyserRef.current.getFloatTimeDomainData(buffer)
+      analyserRef.current.getByteFrequencyData(freqData)
       const pitch = detectPitch(buffer, audioContextRef.current.sampleRate)
-      if (pitch) setLivePitch(pitch.toFixed(1))
+      if (pitch) {
+        const rounded = pitch.toFixed(1)
+        setLivePitch(rounded)
+        setLiveTip(getPitchTip(pitch))
+      }
+      drawSpectrogram(freqData, spectrogramRef.current)
       rafRef.current = requestAnimationFrame(update)
     }
     update()
@@ -74,7 +84,17 @@ export default function Recorder({ apiBase, userId }) {
   return (
     <section className="card">
       <h2>Live Recording & Feedback</h2>
-      <p>Real-time pitch estimate: <strong>{livePitch ? `${livePitch} Hz` : '—'}</strong></p>
+      <div className="live-grid">
+        <div>
+          <p>Real-time pitch estimate: <strong>{livePitch ? `${livePitch} Hz` : '—'}</strong></p>
+          <p className="helper">Target bands: neutral ~155–185 Hz • feminine ~185–300 Hz</p>
+          <p className="tip">{liveTip || 'Tip: use relaxed airflow and gentle resonance. Avoid strain.'}</p>
+        </div>
+        <div>
+          <p className="helper">Live spectrogram</p>
+          <canvas ref={spectrogramRef} width={360} height={120} className="spectrogram" />
+        </div>
+      </div>
       <p className="helper">Short, frequent sessions are safer. If you feel strain or hoarseness, stop and rest.</p>
       {!recording ? (
         <button onClick={startRecording}>Start Recording</button>
@@ -131,4 +151,34 @@ function detectPitch(buffer, sampleRate) {
     return sampleRate / bestOffset
   }
   return null
+}
+
+function drawSpectrogram(freqData, canvas) {
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const { width, height } = canvas
+  const imageData = ctx.getImageData(1, 0, width - 1, height)
+  ctx.putImageData(imageData, 0, 0)
+
+  for (let y = 0; y < height; y++) {
+    const freqIndex = Math.floor((y / height) * freqData.length)
+    const value = freqData[freqIndex]
+    const intensity = value / 255
+    const color = `rgb(${Math.floor(30 + 180 * intensity)}, ${Math.floor(30 + 80 * intensity)}, ${Math.floor(60 + 140 * intensity)})`
+    ctx.fillStyle = color
+    ctx.fillRect(width - 1, height - y, 1, 1)
+  }
+}
+
+function getPitchTip(pitch) {
+  if (pitch < 155) {
+    return 'Tip: try a gentle upward glide and keep airflow relaxed to raise pitch.'
+  }
+  if (pitch >= 155 && pitch <= 185) {
+    return 'Tip: nice neutral range—add light resonance and melodic intonation.'
+  }
+  if (pitch > 185 && pitch <= 300) {
+    return 'Tip: in a feminine band—maintain relaxed jaw and forward resonance.'
+  }
+  return 'Tip: high pitch detected—ease back to a comfortable, sustainable range.'
 }
