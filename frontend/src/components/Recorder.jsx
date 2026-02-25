@@ -12,6 +12,7 @@ export default function Recorder({ apiBase, userId }) {
   const audioContextRef = useRef(null)
   const rafRef = useRef(null)
   const spectrogramRef = useRef(null)
+  const pitchRef = useRef(null)
 
   useEffect(() => () => stopLiveAnalysis(), [])
 
@@ -20,8 +21,8 @@ export default function Recorder({ apiBase, userId }) {
     audioContextRef.current = new AudioContext()
     const source = audioContextRef.current.createMediaStreamSource(stream)
     analyserRef.current = audioContextRef.current.createAnalyser()
-    analyserRef.current.fftSize = 2048
-    analyserRef.current.smoothingTimeConstant = 0.8
+    analyserRef.current.fftSize = 4096
+    analyserRef.current.smoothingTimeConstant = 0.85
     source.connect(analyserRef.current)
     const buffer = new Float32Array(analyserRef.current.fftSize)
     const freqData = new Uint8Array(analyserRef.current.frequencyBinCount)
@@ -31,9 +32,11 @@ export default function Recorder({ apiBase, userId }) {
       analyserRef.current.getByteFrequencyData(freqData)
       const pitch = detectPitch(buffer, audioContextRef.current.sampleRate)
       if (pitch) {
-        const rounded = pitch.toFixed(1)
+        const smoothed = smoothPitch(pitchRef.current, pitch)
+        pitchRef.current = smoothed
+        const rounded = smoothed.toFixed(1)
         setLivePitch(rounded)
-        setLiveTip(getPitchTip(pitch))
+        setLiveTip(getPitchTip(smoothed))
       }
       drawSpectrogram(freqData, spectrogramRef.current)
       rafRef.current = requestAnimationFrame(update)
@@ -140,27 +143,66 @@ export default function Recorder({ apiBase, userId }) {
 
 function detectPitch(buffer, sampleRate) {
   const SIZE = buffer.length
-  let bestOffset = -1
-  let bestCorrelation = 0
   const rms = Math.sqrt(buffer.reduce((sum, v) => sum + v * v, 0) / SIZE)
   if (rms < 0.01) return null
 
-  for (let offset = 50; offset < 1000; offset++) {
-    let correlation = 0
-    for (let i = 0; i < SIZE - offset; i++) {
-      correlation += buffer[i] * buffer[i + offset]
+  // Apply a Hann window to reduce spectral leakage
+  const windowed = new Float32Array(SIZE)
+  for (let i = 0; i < SIZE; i++) {
+    const w = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (SIZE - 1)))
+    windowed[i] = buffer[i] * w
+  }
+
+  const fmin = 80
+  const fmax = 350
+  const minLag = Math.floor(sampleRate / fmax)
+  const maxLag = Math.floor(sampleRate / fmin)
+
+  let bestLag = -1
+  let bestCorr = 0
+
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let corr = 0
+    for (let i = 0; i < SIZE - lag; i++) {
+      corr += windowed[i] * windowed[i + lag]
     }
-    correlation = correlation / (SIZE - offset)
-    if (correlation > bestCorrelation) {
-      bestCorrelation = correlation
-      bestOffset = offset
+    corr /= (SIZE - lag)
+    if (corr > bestCorr) {
+      bestCorr = corr
+      bestLag = lag
     }
   }
 
-  if (bestCorrelation > 0.01 && bestOffset !== -1) {
-    return sampleRate / bestOffset
+  if (bestCorr < 0.02 || bestLag === -1) return null
+
+  // Parabolic interpolation for better accuracy
+  const lag0 = Math.max(minLag, bestLag - 1)
+  const lag1 = bestLag
+  const lag2 = Math.min(maxLag, bestLag + 1)
+
+  const c0 = autocorr(windowed, lag0)
+  const c1 = autocorr(windowed, lag1)
+  const c2 = autocorr(windowed, lag2)
+
+  const denom = (2 * c1 - c2 - c0)
+  const shift = denom !== 0 ? (c2 - c0) / (2 * denom) : 0
+  const refinedLag = bestLag + shift
+
+  return sampleRate / refinedLag
+}
+
+function autocorr(buffer, lag) {
+  let corr = 0
+  for (let i = 0; i < buffer.length - lag; i++) {
+    corr += buffer[i] * buffer[i + lag]
   }
-  return null
+  return corr / (buffer.length - lag)
+}
+
+function smoothPitch(previous, current) {
+  if (!previous) return current
+  const alpha = 0.2
+  return previous + alpha * (current - previous)
 }
 
 function drawSpectrogram(freqData, canvas) {
