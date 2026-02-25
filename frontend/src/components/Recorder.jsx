@@ -112,6 +112,9 @@ export default function Recorder({ apiBase, userId }) {
       {metrics && (
         <div className="panel">
           <h3>Multi‑Dimensional Metrics</h3>
+          {metrics.analysis_error && (
+            <p className="helper">Analysis note: {metrics.analysis_error}. Try a longer recording or different browser.</p>
+          )}
           <ul>
             <li>Average F0: {metrics.f0_mean?.toFixed(1)} Hz</li>
             <li>Median F0: {metrics.f0_median?.toFixed(1)} Hz</li>
