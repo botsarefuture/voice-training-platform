@@ -3,7 +3,7 @@ from flask_cors import CORS
 from .db import db
 from .routes.users import users_bp
 from .routes.audio import audio_bp
-from .routes.modules import modules_bp
+from .routes.modules import modules_bp, seed_default_modules
 from .routes.progress import progress_bp
 from .routes.community import community_bp
 from config import Config
@@ -18,6 +18,7 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        seed_default_modules()
 
     @app.route("/")
     def index():
