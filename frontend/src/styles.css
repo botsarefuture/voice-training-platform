@@ -10,3 +10,10 @@ input, textarea { width: 100%; margin: 6px 0; padding: 8px; border-radius: 8px; 
 .live-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); align-items: center; }
 .spectrogram { width: 100%; background: #0f172a; border-radius: 8px; border: 1px solid #1f2937; }
 .tip { margin: 8px 0 0; padding: 8px 10px; background: #eef2ff; border-radius: 8px; color: #3730a3; font-size: 0.95rem; }
+.pitch-visual { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 8px 0 6px; height: 28px; border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb; }
+.pitch-band { display: flex; align-items: center; justify-content: center; font-size: 0.75rem; color: #111827; }
+.pitch-band.lower { background: #fee2e2; }
+.pitch-band.neutral { background: #e0f2fe; }
+.pitch-band.feminine { background: #dcfce7; }
+.pitch-band.high { background: #f3e8ff; }
+.pitch-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: #111827; box-shadow: 0 0 0 2px rgba(255,255,255,0.6); }

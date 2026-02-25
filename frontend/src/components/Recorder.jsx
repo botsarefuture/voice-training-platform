@@ -87,6 +87,13 @@ export default function Recorder({ apiBase, userId }) {
       <div className="live-grid">
         <div>
           <p>Real-time pitch estimate: <strong>{livePitch ? `${livePitch} Hz` : '—'}</strong></p>
+          <div className="pitch-visual">
+            <div className="pitch-band lower">Lower &lt;155</div>
+            <div className="pitch-band neutral">Neutral 155–185</div>
+            <div className="pitch-band feminine">Feminine 185–300</div>
+            <div className="pitch-band high">High &gt;300</div>
+            <div className="pitch-marker" style={{ left: getPitchMarkerLeft(livePitch) }} />
+          </div>
           <p className="helper">Target bands: neutral ~155–185 Hz • feminine ~185–300 Hz</p>
           <p className="tip">{liveTip || 'Tip: use relaxed airflow and gentle resonance. Avoid strain.'}</p>
         </div>
@@ -184,4 +191,13 @@ function getPitchTip(pitch) {
     return 'Tip: in a feminine band—maintain relaxed jaw and forward resonance.'
   }
   return 'Tip: high pitch detected—ease back to a comfortable, sustainable range.'
+}
+
+function getPitchMarkerLeft(livePitch) {
+  if (!livePitch) return '0%'
+  const pitch = Math.max(80, Math.min(350, parseFloat(livePitch)))
+  const min = 80
+  const max = 350
+  const pct = ((pitch - min) / (max - min)) * 100
+  return `${pct}%`
 }
